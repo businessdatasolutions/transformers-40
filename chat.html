@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transformers.js Chat</title>
+  <script type="importmap">
+  {
+    "imports": {
+      "@huggingface/transformers": "https://esm.sh/@huggingface/transformers@next"
+    }
+  }
+  </script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/katex.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.22/dist/contrib/auto-render.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #f5f5f5;
+      display: flex;
+      flex-direction: column;
+      height: 100dvh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1a1a2e;
+      color: #e0e0e0;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+
+    header h1 { font-size: 1rem; font-weight: 600; }
+
+    header .model-tag {
+      font-size: 0.72rem;
+      background: #2d2d4e;
+      color: #a0a0d0;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+
+    #status {
+      margin-left: auto;
+      font-size: 0.8rem;
+      color: #8080a0;
+    }
+
+    header a {
+      font-size: 0.75rem;
+      color: #6060a0;
+      text-decoration: none;
+      margin-left: 8px;
+    }
+    header a:hover { color: #a0a0d0; }
+
+    /* ── Progress bar ── */
+    #progress-wrap {
+      height: 3px;
+      background: #2d2d4e;
+      flex-shrink: 0;
+    }
+    #progress-bar {
+      height: 100%;
+      width: 0%;
+      background: #5d5dff;
+      transition: width 0.3s;
+    }
+    #progress-bar.compiling {
+      background: repeating-linear-gradient(
+        -45deg,
+        #5d5dff,
+        #5d5dff 10px,
+        #4040cc 10px,
+        #4040cc 20px
+      );
+      background-size: 28px 100%;
+      animation: progress-slide 0.6s linear infinite;
+    }
+    @keyframes progress-slide {
+      from { background-position: 0 0; }
+      to   { background-position: 28px 0; }
+    }
+
+    /* ── Messages ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .message {
+      max-width: 78%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      line-height: 1.5;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .message.user {
+      align-self: flex-end;
+      background: #1a1a2e;
+      color: #e8e8ff;
+      border-bottom-right-radius: 3px;
+    }
+
+    .message.assistant {
+      align-self: flex-start;
+      background: #fff;
+      color: #1a1a2e;
+      border-bottom-left-radius: 3px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    /* ── Thinking block ── */
+    .think-block {
+      margin-bottom: 8px;
+      border: 1px solid #e0e0f0;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .think-block summary {
+      cursor: pointer;
+      padding: 6px 10px;
+      font-size: 0.75rem;
+      color: #8080a0;
+      background: #f8f8ff;
+      user-select: none;
+      list-style: none;
+    }
+    .think-block summary::before {
+      content: "▶ ";
+      font-size: 0.6rem;
+    }
+    .think-block[open] summary::before { content: "▼ "; }
+
+    .think-text {
+      padding: 8px 10px;
+      font-size: 0.75rem;
+      color: #6060a0;
+      background: #fbfbff;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: inherit;
+      max-height: 300px;
+      overflow-y: auto;
+    }
+
+    /* ── Footer ── */
+    footer {
+      background: #fff;
+      border-top: 1px solid #e0e0e0;
+      padding: 12px 16px;
+      display: flex;
+      gap: 8px;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+
+    #input {
+      flex: 1;
+      resize: none;
+      border: 1px solid #d0d0e0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.9rem;
+      font-family: inherit;
+      outline: none;
+      min-height: 42px;
+      max-height: 120px;
+      line-height: 1.4;
+    }
+    #input:focus { border-color: #5d5dff; }
+    #input:disabled { background: #f5f5f5; }
+
+    #send-btn {
+      background: #1a1a2e;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    #send-btn:hover:not(:disabled) { background: #2d2d4e; }
+    #send-btn:disabled { opacity: 0.4; cursor: default; }
+
+    #think-btn {
+      border: 1px solid #d0d0e0;
+      background: #f8f8ff;
+      color: #6060a0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    #think-btn[data-active="true"] {
+      border-color: #5d5dff;
+      background: #f0f0ff;
+      color: #4040cc;
+    }
+    #think-btn:disabled { opacity: 0.4; cursor: default; }
+
+    #upload-btn {
+      border: 1px solid #d0d0e0;
+      background: #f8f8ff;
+      color: #6060a0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    #upload-btn:has(input:disabled) { opacity: 0.4; cursor: default; }
+    #file-input { display: none; }
+
+    #docs-badge {
+      font-size: 0.72rem;
+      background: #e8f0ff;
+      color: #4060cc;
+      border: 1px solid #c0d0ff;
+      border-radius: 4px;
+      padding: 2px 7px;
+      white-space: nowrap;
+      align-self: center;
+    }
+
+    #model-select {
+      background: #2d2d4e;
+      color: #a0a0d0;
+      border: 1px solid #4040aa;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      outline: none;
+    }
+    #model-select:disabled { opacity: 0.5; cursor: default; }
+    #model-select option { background: #1a1a2e; }
+
+    #load-btn {
+      background: #5d5dff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      padding: 4px 12px;
+      font-size: 0.8rem;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    #load-btn:hover:not(:disabled) { background: #4040cc; }
+    #load-btn:disabled { opacity: 0.5; cursor: default; }
+
+    /* ── Rendered markdown in answer bubbles ── */
+    .answer-text.rendered { white-space: normal; }
+    .answer-text.rendered p  { margin: 0 0 0.6em; }
+    .answer-text.rendered p:last-child { margin-bottom: 0; }
+    .answer-text.rendered h1,
+    .answer-text.rendered h2,
+    .answer-text.rendered h3 { margin: 0.8em 0 0.3em; font-size: 1em; }
+    .answer-text.rendered ul,
+    .answer-text.rendered ol { padding-left: 1.4em; margin: 0.4em 0; }
+    .answer-text.rendered li { margin: 0.2em 0; }
+    .answer-text.rendered code {
+      background: #f0f0f8;
+      padding: 0 3px;
+      border-radius: 3px;
+      font-size: 0.85em;
+    }
+    .answer-text.rendered pre {
+      background: #f0f0f8;
+      padding: 8px 10px;
+      border-radius: 6px;
+      overflow-x: auto;
+      font-size: 0.82em;
+      margin: 0.4em 0;
+    }
+    .answer-text.rendered pre code { background: none; padding: 0; }
+    .answer-text.rendered .katex  { font-size: 1em; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Chat</h1>
+  <select id="model-select"></select>
+  <button id="load-btn">Load model</button>
+  <span id="model-tag" class="model-tag"></span>
+  <span id="status">Select a model to begin</span>
+  <a href="index.html">← Object detection demo</a>
+</header>
+
+<div id="progress-wrap">
+  <div id="progress-bar"></div>
+</div>
+
+<div id="messages"></div>
+
+<footer>
+  <label id="upload-btn" title="Upload .txt or .pdf document">
+    + Doc
+    <input type="file" id="file-input" accept=".txt,.pdf" multiple disabled />
+  </label>
+  <span id="docs-badge" hidden></span>
+  <textarea id="input" rows="1" placeholder="Message… (Enter to send, Shift+Enter for newline)" disabled></textarea>
+  <button id="think-btn" data-active="true" disabled>Thinking ON</button>
+  <button id="send-btn" disabled>Send</button>
+</footer>
+
+<script type="module" src="chat.js"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "transformers-playground",
+  "type": "module",
+  "scripts": {
+    "dev": "vite"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "next"
+  },
+  "devDependencies": {
+    "vite": "^6"
+  }
+}
